@@ -1,20 +1,29 @@
 package robot
 
 import (
-	"bytes"
+	"compress/gzip"
 	"fmt"
 	"github.com/tebeka/selenium"
 	"github.com/tebeka/selenium/chrome"
+	"io"
+	"io/ioutil"
 	"main/google"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 )
 
-func Run(username,password,secret string)  {
+type MyCookieData struct {
+	Session string
+	Batman  string
+}
+
+func Run(username, password, secret string) {
 	done := make(chan int)
 	const (
 		seleniumPath = `D:\chromedriver.exe`
-		port            = 9515
+		port         = 9515
 	)
 	opts := []selenium.ServiceOption{}
 	service, err := selenium.NewChromeDriverService(seleniumPath, port, opts...)
@@ -29,6 +38,7 @@ func Run(username,password,secret string)  {
 	imagCaps := map[string]interface{}{
 		"profile.managed_default_content_settings.images": 2,
 	}
+
 	chromeCaps := chrome.Capabilities{
 		Prefs: imagCaps,
 		Path:  "",
@@ -38,6 +48,7 @@ func Run(username,password,secret string)  {
 			"--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36",
 		},
 	}
+
 	caps.AddChrome(chromeCaps)
 	w_b1, err := selenium.NewRemote(caps, fmt.Sprintf("http://localhost:%d/wd/hub", port))
 	if err != nil {
@@ -46,88 +57,131 @@ func Run(username,password,secret string)  {
 	}
 	//但是不会导致seleniumServer关闭
 	defer w_b1.Quit()
-	login(username,password,secret,w_b1)
+	login(username, password, secret, w_b1)
+	getUserList(w_b1)
 
 	<-done
 }
 
-func login(username,password,secret string,w_b1 selenium.WebDriver)  {
+func login(username, password, secret string, w_b1 selenium.WebDriver) {
 	err := w_b1.Get("http://bibi.cnluyao.cn/bi")
 	if err != nil {
 		fmt.Println("get page faild", err.Error())
 		return
 	}
-	wes,err := w_b1. FindElements(selenium.ByClassName,"form-control")
+	wes, err := w_b1.FindElements(selenium.ByClassName, "form-control")
 	if err != nil {
 		fmt.Println(err.Error())
 		return
 	}
 	var input selenium.WebElement
-	for _,input = range wes {
-		idName,_ := input.GetAttribute("id")
+	for _, input = range wes {
+		idName, _ := input.GetAttribute("id")
 		if idName == "username" {
 			input.SendKeys(username)
-		}else {
+		} else {
 			input.SendKeys(password)
 		}
 	}
 
-	we,err := w_b1.FindElement(selenium.ByTagName,"button")
+	we, err := w_b1.FindElement(selenium.ByTagName, "button")
 	if err != nil {
 		fmt.Println(err.Error())
 		return
 	}
-	for i:=0;i<5;i++ {
+	for i := 0; i < 5; i++ {
 		we.Click()
 	}
 	time.Sleep(1 * time.Second)
 
-	we,err = w_b1.FindElement(selenium.ByID,"googleCodeNum")
+	we, err = w_b1.FindElement(selenium.ByID, "googleCodeNum")
 	if err != nil {
 		fmt.Println(err.Error())
 		return
 	}
 
 	code := google.Index(secret)
-	fmt.Println(code)
 	we.SendKeys(code)
 	time.Sleep(1 * time.Second)
-	we,err = w_b1.FindElement(selenium.ByTagName,"button")
+	we, err = w_b1.FindElement(selenium.ByTagName, "button")
 	if err != nil {
 		fmt.Println(err.Error())
 		return
 	}
-	for i:=0;i<5;i++ {
+	for i := 0; i < 5; i++ {
 		we.Click()
 	}
 }
 
-func getUserList()  {
-	
+func getUserList(wb selenium.WebDriver) {
+	data := url.Values{}
+	data.Set("page", "1")
+	data.Set("limit", "500")
+	data.Set("start", "2012-11-24 00:00:00")
+	data.Set("end", "2019-11-24 23:00:00")
+	data.Set("pid", "")
+	data.Set("rid", "")
+
+	var ck *MyCookieData
+	ck = new(MyCookieData)
+	cookies, _ := wb.GetCookies()
+	var cookie selenium.Cookie
+	for _, cookie = range cookies {
+		if cookie.Name == "batmanCok" {
+			ck.Batman = cookie.Value
+		} else if cookie.Name == "JSESSIONID" {
+			ck.Session = cookie.Value
+		}
+	}
+
+	for i := 0; i < 5; i++ {
+		res := request("http://bibi.cnluyao.cn/bi/extension/extensions", ck, strings.NewReader(data.Encode()))
+		fmt.Println(string(res))
+	}
 }
 
-func request(url string,body []byte) (response *http.Response,err error)  {
-	tr := &http.Transport{
-		MaxIdleConns:       10,
-		IdleConnTimeout:    30 * time.Second,
-		DisableCompression: true,
-	}
-	client := &http.Client{Transport: tr}
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
-	if err != nil {
-		fmt.Println("Fatal error ", err.Error())
-	}
-	req.Header.Set("Accept","application/json, text/javascript, */*; q=0.01")
-	req.Header.Set("Accept-Encoding","gzip, deflate")
-	req.Header.Set("Accept-Language","zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7")
-	req.Header.Set("Content-Length","84")
-	req.Header.Set("Content-Type","application/x-www-form-urlencoded; charset=UTF-8")
-	req.Header.Set("Host","bibi.cnluyao.cn")
-	req.Header.Set("Origin","http://bibi.cnluyao.cn")
-	req.Header.Set("Referer","http://bibi.cnluyao.cn/bi/login_public.html")
-	req.Header.Set("User-Agent","Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36")
-	req.Header.Set("X-Requested-With","XMLHttpRequest")
+func request(url string, cookie *MyCookieData, body io.Reader) []byte {
+	payload := strings.NewReader("page=1&limit=500&start=2012-11-24%2000%3A00%3A00&end=2019-11-24%2023%3A00%3A00&pid=&rid=")
+	req, _ := http.NewRequest("POST", url, payload)
+	req.Header.Add("Accept", "application/json, text/javascript, */*; q=0.01")
+	req.Header.Add("Accept-Encoding", "gzip, deflate")
+	req.Header.Add("Accept-Language", "zh-CN,zh;q=0.9")
+	req.Header.Add("Content-Type", "application/x-www-form-urlencoded;charset=utf-8")
 
-	defer req.Body.Close()
-	return client.Do(req)
+	ck := fmt.Sprintf("JSESSIONID=%s;batmanCok=%s", cookie.Session, cookie.Batman)
+	fmt.Println(ck)
+	req.Header.Add("Cookie", ck)
+	req.Header.Add("Referer", "http://bibi.cnluyao.cn/bi/gameMaster/Newgeneralizedetails.html")
+	req.Header.Add("Origin", "http://bibi.cnluyao.cn")
+	req.Header.Add("Host", "bibi.cnluyao.cn")
+	req.Header.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36")
+	req.Header.Add("X-Requested-With", "XMLHttpRequest")
+	req.Header.Add("Content-Length", "83")
+	req.Header.Add("Connection", "keep-alive")
+	req.Header.Add("Cache-Control", "no-cache")
+	req.Header.Add("cache-control", "no-cache")
+
+	res, err := http.DefaultClient.Do(req)
+	defer res.Body.Close()
+
+	var response []byte
+	if err != nil {
+		fmt.Println(err.Error())
+		return response
+	}
+
+	reader, error := gzip.NewReader(res.Body)
+	if error != nil {
+		fmt.Println(error.Error())
+		return response
+	}
+	response, _ = ioutil.ReadAll(reader)
+	cookies := res.Cookies()
+	for _, c := range cookies {
+		if c.Name == "batmanCok" {
+			cookie.Batman = c.Value
+		}
+	}
+
+	return response
 }

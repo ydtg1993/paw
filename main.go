@@ -8,16 +8,16 @@ import (
 	"main/robot"
 )
 
-func main()  {
+func main() {
 	done := make(chan bool)
-	robots,err := getRobots()
+	robots, err := getRobots()
 	if err != nil {
 		fmt.Println(err)
 	}
 
 	var rb robotInfo
-	for _,rb = range robots{
-		robot.Run(rb.Username,rb.Password,rb.Secret)
+	for _, rb = range robots {
+		robot.Run(rb.Username, rb.Password, rb.Secret)
 	}
 
 	<-done
@@ -26,7 +26,7 @@ func main()  {
 type robotInfo struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
-	Secret string `json:"secret"`
+	Secret   string `json:"secret"`
 }
 
 func getRobots() (robots []robotInfo, err error) {
