@@ -7,11 +7,9 @@ import (
 	"github.com/tebeka/selenium/chrome"
 	"io"
 	"io/ioutil"
-	"main/google"
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 )
 
 type MyCookieData struct {
@@ -57,60 +55,14 @@ func Run(username, password, secret string) {
 	}
 	//但是不会导致seleniumServer关闭
 	defer w_b1.Quit()
-	login(username, password, secret, w_b1)
+	flag := Login(username, password, secret, w_b1)
+	w_b1.Refresh()
+	if !flag {
+		return
+	}
 	getUserList(w_b1)
 
 	<-done
-}
-
-func login(username, password, secret string, w_b1 selenium.WebDriver) {
-	err := w_b1.Get("http://bibi.cnluyao.cn/bi")
-	if err != nil {
-		fmt.Println("get page faild", err.Error())
-		return
-	}
-	wes, err := w_b1.FindElements(selenium.ByClassName, "form-control")
-	if err != nil {
-		fmt.Println(err.Error())
-		return
-	}
-	var input selenium.WebElement
-	for _, input = range wes {
-		idName, _ := input.GetAttribute("id")
-		if idName == "username" {
-			input.SendKeys(username)
-		} else {
-			input.SendKeys(password)
-		}
-	}
-
-	we, err := w_b1.FindElement(selenium.ByTagName, "button")
-	if err != nil {
-		fmt.Println(err.Error())
-		return
-	}
-	for i := 0; i < 5; i++ {
-		we.Click()
-	}
-	time.Sleep(1 * time.Second)
-
-	we, err = w_b1.FindElement(selenium.ByID, "googleCodeNum")
-	if err != nil {
-		fmt.Println(err.Error())
-		return
-	}
-
-	code := google.Index(secret)
-	we.SendKeys(code)
-	time.Sleep(1 * time.Second)
-	we, err = w_b1.FindElement(selenium.ByTagName, "button")
-	if err != nil {
-		fmt.Println(err.Error())
-		return
-	}
-	for i := 0; i < 5; i++ {
-		we.Click()
-	}
 }
 
 func getUserList(wb selenium.WebDriver) {
